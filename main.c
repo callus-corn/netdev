@@ -42,7 +42,7 @@ int main() {
   int n = recvmsg(rtnetlink_socket, &msg, 0);
 
   // 出力
-  for (struct nlmsghdr *answer = (struct nlmsghdr *)iov.iov_base; NLMSG_OK(answer, n); answer = NLMSG_NEXT(answer, n)) {
+  for (struct nlmsghdr *answer = (struct nlmsghdr *)msg.msg_iov->iov_base; NLMSG_OK(answer, n); answer = NLMSG_NEXT(answer, n)) {
     int attrlen = answer->nlmsg_len - sizeof(struct request);
     for (struct rtattr *attr = (struct rtattr *)((void *)answer + sizeof(struct request)); RTA_OK(attr, attrlen); attr = RTA_NEXT(attr, attrlen)) {
       if (attr->rta_type == IFLA_IFNAME) {
