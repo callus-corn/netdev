@@ -3,7 +3,7 @@
 #include <linux/rtnetlink.h>
 #include <sys/socket.h>
 
-struct message {
+struct request {
   struct nlmsghdr header;
   struct ifinfomsg ifinfo;
 };
@@ -12,7 +12,7 @@ int main() {
   int rtnetlink_socket = socket(AF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE);
 
   // リクエスト送信
-  struct message request = {
+  struct request req = {
     .header.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg)),
     .header.nlmsg_type = RTM_GETLINK,
     .header.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP,
@@ -21,7 +21,7 @@ int main() {
     .ifinfo.ifi_family = AF_PACKET,
   };
 
-  send(rtnetlink_socket, &request, sizeof(request), 0);
+  send(rtnetlink_socket, &req, sizeof(req), 0);
 
   // データ受信
   char buf[32768];
@@ -39,26 +39,15 @@ int main() {
     .msg_iovlen = 1,
   };
 
-  recvmsg(rtnetlink_socket, &msg, 0);
+  int n = recvmsg(rtnetlink_socket, &msg, 0);
 
   // 出力
-  struct message *answer = (struct message *)iov.iov_base;
-  while(answer->header.nlmsg_len) {
-    struct nlattr *attr = (struct nlattr *)((char *)answer + sizeof(struct message));
-    for (unsigned short readed = sizeof(struct message); readed < answer->header.nlmsg_len;) {
-      printf("readed: %d\n", readed);
-      // インターフェース名の出力 
-      if (attr->nla_type == IFLA_IFNAME) {
-        char *ifname = (char *)attr + sizeof(struct nlattr);
-	printf("%s\n", ifname);
-	break;
+  for (struct nlmsghdr *answer = (struct nlmsghdr *)iov.iov_base; NLMSG_OK(answer, n); answer = NLMSG_NEXT(answer, n)) {
+    int attrlen = answer->nlmsg_len - sizeof(struct request);
+    for (struct rtattr *attr = (struct rtattr *)((void *)answer + sizeof(struct request)); RTA_OK(attr, attrlen); attr = RTA_NEXT(attr, attrlen)) {
+      if (attr->rta_type == IFLA_IFNAME) {
+	printf("%s\n", (char *)RTA_DATA(attr));
       }
-
-      readed += attr->nla_len;
-      attr = (struct nlattr *)((char *)attr + attr->nla_len);
     }
-
-    iov.iov_base += answer->header.nlmsg_len;
-    answer = (struct message *)iov.iov_base;
   }
 }
